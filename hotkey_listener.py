@@ -6,6 +6,66 @@ from ctypes import wintypes
 from PyQt6.QtCore import pyqtSignal, QObject
 import pyperclip
 
+# Maximum number of Shift+Left caret steps to simulate when re-selecting pasted text
+MAX_RESELECT_STEPS = 2000
+
+# Standard Win32 HGLOBAL clipboard formats safe to snapshot & restore byte-for-byte:
+# 1=CF_TEXT, 8=CF_DIB, 13=CF_UNICODETEXT, 15=CF_HDROP (files), 16=CF_LOCALE, 17=CF_DIBV5 (screenshots)
+SAFE_STD_CLIPBOARD_FORMATS = {1, 8, 13, 15, 16, 17}
+
+# Registered named clipboard formats safe to snapshot & restore byte-for-byte
+SAFE_NAMED_CLIPBOARD_FORMATS = {
+    "PNG",
+    "JFIF",
+    "GIF",
+    "HTML Format",
+    "Rich Text Format",
+    "CF_HTML",
+    "Csv",
+    "Preferred DropEffect",
+    "FileName",
+    "FileNameW",
+    "UniformResourceLocator",
+    "UniformResourceLocatorW",
+}
+
+# Windows 10/11 Clipboard History & Cloud Clipboard exclusion format names
+CLIPBOARD_EXCLUSION_FORMATS = (
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+)
+
+kernel32_dll = ctypes.windll.kernel32
+kernel32_dll.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+kernel32_dll.GlobalAlloc.restype = wintypes.HGLOBAL
+kernel32_dll.GlobalFree.argtypes = [wintypes.HGLOBAL]
+kernel32_dll.GlobalFree.restype = wintypes.HGLOBAL
+kernel32_dll.GlobalSize.argtypes = [wintypes.HGLOBAL]
+kernel32_dll.GlobalSize.restype = ctypes.c_size_t
+kernel32_dll.GlobalLock.argtypes = [wintypes.HGLOBAL]
+kernel32_dll.GlobalLock.restype = ctypes.c_void_p
+kernel32_dll.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+kernel32_dll.GlobalUnlock.restype = wintypes.BOOL
+
+user32_cb = ctypes.windll.user32
+user32_cb.OpenClipboard.argtypes = [wintypes.HWND]
+user32_cb.OpenClipboard.restype = wintypes.BOOL
+user32_cb.CloseClipboard.argtypes = []
+user32_cb.CloseClipboard.restype = wintypes.BOOL
+user32_cb.EmptyClipboard.argtypes = []
+user32_cb.EmptyClipboard.restype = wintypes.BOOL
+user32_cb.EnumClipboardFormats.argtypes = [wintypes.UINT]
+user32_cb.EnumClipboardFormats.restype = wintypes.UINT
+user32_cb.GetClipboardData.argtypes = [wintypes.UINT]
+user32_cb.GetClipboardData.restype = wintypes.HANDLE
+user32_cb.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+user32_cb.SetClipboardData.restype = wintypes.HANDLE
+user32_cb.GetClipboardFormatNameW.argtypes = [wintypes.UINT, wintypes.LPWSTR, ctypes.c_int]
+user32_cb.GetClipboardFormatNameW.restype = ctypes.c_int
+user32_cb.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+user32_cb.RegisterClipboardFormatW.restype = wintypes.UINT
+
 
 def _caret_steps(text):
     """
@@ -160,6 +220,7 @@ class HotkeyListener(QObject):
         self.thread_id = None
         self.thread = None
         self.is_processing = False
+        self._processing_started_at = 0.0
         # Modifier state captured exactly when the hotkey fires (background thread)
         self.trigger_shift = False
         self.trigger_caps  = False
@@ -180,6 +241,7 @@ class HotkeyListener(QObject):
             return
             
         self.is_running = False
+        self.is_processing = False
         if self.thread_id:
             # Send WM_QUIT (0x0012) to wake up and terminate the GetMessage loop in the background thread
             ctypes.windll.user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)
@@ -238,14 +300,17 @@ class HotkeyListener(QObject):
                 
             if msg.message == 0x0312:  # WM_HOTKEY
                 if self.is_processing:
-                    logging.info("WM_HOTKEY ignored (already processing another hotkey).")
-                    continue
+                    if time.time() - self._processing_started_at < 5.0:
+                        logging.info("WM_HOTKEY ignored (already processing another hotkey).")
+                        continue
+                    logging.warning("WM_HOTKEY processing lock timed out (>5s), resetting.")
                 hotkey_id = msg.wParam
                 # Capture modifier state HERE — before any processing delays
                 self.trigger_shift = (user32.GetAsyncKeyState(0x10) & 0x8000) != 0
                 self.trigger_caps  = (user32.GetKeyState(0x14) & 0x0001) != 0
                 logging.info(f"WM_HOTKEY перехоплено в потоці: id={hotkey_id}, shift={self.trigger_shift}, caps={self.trigger_caps}")
                 self.is_processing = True
+                self._processing_started_at = time.time()
                 try:
                     if hotkey_id == 1:
                         self.signals.replace_trigger.emit()
@@ -253,8 +318,11 @@ class HotkeyListener(QObject):
                         self.signals.popup_trigger.emit()
                     elif hotkey_id == 3:
                         self.signals.case_trigger.emit()
-                finally:
+                    else:
+                        self.is_processing = False
+                except Exception:
                     self.is_processing = False
+                    raise
                     
         # Unregister hotkeys before thread exits
         user32.UnregisterHotKey(None, 1)
@@ -370,10 +438,143 @@ class HotkeyListener(QObject):
         except Exception as e:
             logging.error(f"Error switching system layout: {e}")
 
+    def _open_clipboard_retry(self, retries=10, delay=0.01):
+        """Open Win32 clipboard with NULL owner so we never create an OLE lock on the main thread."""
+        for _ in range(retries):
+            if user32_cb.OpenClipboard(None):
+                return True
+            time.sleep(delay)
+        return False
+
+    def _set_win32_exclusion_flags_locked(self):
+        """Must be called while clipboard is open. Prevents Win+V and Cloud Clipboard from logging internal writes."""
+        GMEM_MOVEABLE = 0x0002
+        for fmt_name in CLIPBOARD_EXCLUSION_FORMATS:
+            fmt_id = user32_cb.RegisterClipboardFormatW(fmt_name)
+            if fmt_id:
+                h_mem = kernel32_dll.GlobalAlloc(GMEM_MOVEABLE, 4)
+                if h_mem:
+                    ptr = kernel32_dll.GlobalLock(h_mem)
+                    if ptr:
+                        ctypes.memset(ptr, 0, 4)
+                        kernel32_dll.GlobalUnlock(h_mem)
+                        if not user32_cb.SetClipboardData(fmt_id, h_mem):
+                            kernel32_dll.GlobalFree(h_mem)
+                    else:
+                        kernel32_dll.GlobalFree(h_mem)
+
+    def _set_temp_clipboard_text(self, text):
+        """Write temporary text (or empty string) to Win32 clipboard without OLE lock and without polluting Win+V."""
+        GMEM_MOVEABLE = 0x0002
+        CF_UNICODETEXT = 13
+        if self._open_clipboard_retry():
+            try:
+                user32_cb.EmptyClipboard()
+                self._set_win32_exclusion_flags_locked()
+                if text:
+                    raw = (text + "\0").encode("utf-16-le")
+                    h_mem = kernel32_dll.GlobalAlloc(GMEM_MOVEABLE, len(raw))
+                    if h_mem:
+                        ptr = kernel32_dll.GlobalLock(h_mem)
+                        if ptr:
+                            ctypes.memmove(ptr, raw, len(raw))
+                            kernel32_dll.GlobalUnlock(h_mem)
+                            if not user32_cb.SetClipboardData(CF_UNICODETEXT, h_mem):
+                                kernel32_dll.GlobalFree(h_mem)
+                        else:
+                            kernel32_dll.GlobalFree(h_mem)
+                return
+            finally:
+                user32_cb.CloseClipboard()
+        pyperclip.copy(text or "")
+
+    def snapshot_clipboard(self):
+        """
+        Capture all safe Win32 clipboard formats (screenshots CF_DIB/CF_DIBV5/PNG,
+        copied files CF_HDROP, HTML, RTF, Unicode text, etc.) into memory without OLE locks.
+        """
+        snap = []
+        if not self._open_clipboard_retry():
+            try:
+                txt = pyperclip.paste()
+                if txt:
+                    snap.append((13, (txt + "\0").encode("utf-16-le")))
+            except Exception:
+                pass
+            return snap
+
+        try:
+            fmt = 0
+            name_buf = ctypes.create_unicode_buffer(256)
+            while True:
+                fmt = user32_cb.EnumClipboardFormats(fmt)
+                if not fmt:
+                    break
+                is_safe = fmt in SAFE_STD_CLIPBOARD_FORMATS
+                if not is_safe and fmt >= 0xC000:
+                    length = user32_cb.GetClipboardFormatNameW(fmt, name_buf, 255)
+                    if length > 0 and name_buf.value in SAFE_NAMED_CLIPBOARD_FORMATS:
+                        is_safe = True
+                if not is_safe:
+                    continue
+
+                handle = user32_cb.GetClipboardData(fmt)
+                if not handle:
+                    continue
+                size = kernel32_dll.GlobalSize(handle)
+                if size <= 0 or size > 100 * 1024 * 1024:  # 100 MB safety cap
+                    continue
+                ptr = kernel32_dll.GlobalLock(handle)
+                if not ptr:
+                    continue
+                try:
+                    raw_bytes = ctypes.string_at(ptr, size)
+                    snap.append((fmt, raw_bytes))
+                finally:
+                    kernel32_dll.GlobalUnlock(handle)
+        except Exception as e:
+            logging.error(f"Помилка збереження стану буфера обміну: {e}")
+        finally:
+            user32_cb.CloseClipboard()
+        return snap
+
+    def restore_clipboard(self, snap):
+        """Restore previously captured Win32 clipboard formats (screenshots, files, text, etc.)."""
+        try:
+            if isinstance(snap, str):
+                self._set_temp_clipboard_text(snap)
+                return
+            if not isinstance(snap, list):
+                return
+
+            GMEM_MOVEABLE = 0x0002
+            if self._open_clipboard_retry():
+                try:
+                    user32_cb.EmptyClipboard()
+                    if snap:
+                        self._set_win32_exclusion_flags_locked()
+                    for fmt, raw_bytes in snap:
+                        if not raw_bytes:
+                            continue
+                        h_mem = kernel32_dll.GlobalAlloc(GMEM_MOVEABLE, len(raw_bytes))
+                        if h_mem:
+                            ptr = kernel32_dll.GlobalLock(h_mem)
+                            if ptr:
+                                ctypes.memmove(ptr, raw_bytes, len(raw_bytes))
+                                kernel32_dll.GlobalUnlock(h_mem)
+                                if not user32_cb.SetClipboardData(fmt, h_mem):
+                                    kernel32_dll.GlobalFree(h_mem)
+                            else:
+                                kernel32_dll.GlobalFree(h_mem)
+                finally:
+                    user32_cb.CloseClipboard()
+        except Exception as e:
+            logging.error(f"Помилка відновлення буфера обміну: {e}")
+
     def grab_selected_text(self):
         logging.info("Копіювання виділеного тексту через чистий Ctrl+C...")
         user32 = ctypes.windll.user32
-        old_clipboard = pyperclip.paste()
+        old_clipboard = self.snapshot_clipboard()
         pyperclip.copy("")
         seq_before = user32.GetClipboardSequenceNumber()
 
@@ -490,31 +691,30 @@ class HotkeyListener(QObject):
             if not selected:
                 # Arrow keys move by grapheme, not by code unit
                 text_len = _caret_steps(normalized)
-                # Strategy B: SendInput Shift+Left × N with hardware_scancode (Batched for instant selection)
-                shift_down = make_keyboard_input(0x10, is_key_up=False, hardware_scancode=True)
-                user32_dll.SendInput(1, ctypes.byref(shift_down), ctypes.sizeof(INPUT))
-                time.sleep(0.01)
-                
-                # Maximize batch size to avoid overflow (usually safe up to a few thousand)
-                MAX_BATCH = 1000
-                events_needed = text_len * 2
-                
-                arr = (INPUT * events_needed)()
-                for i in range(text_len):
-                    arr[i*2] = make_keyboard_input(0x25, is_key_up=False, extended=True, hardware_scancode=True)
-                    arr[i*2 + 1] = make_keyboard_input(0x25, is_key_up=True, extended=True, hardware_scancode=True)
-                
-                # Send in chunks if text is extremely long, otherwise send all at once
-                for i in range(0, events_needed, MAX_BATCH):
-                    chunk_size = min(MAX_BATCH, events_needed - i)
-                    chunk_arr = (INPUT * chunk_size)()
-                    ctypes.memmove(chunk_arr, ctypes.byref(arr, i * ctypes.sizeof(INPUT)), chunk_size * ctypes.sizeof(INPUT))
-                    user32_dll.SendInput(chunk_size, chunk_arr, ctypes.sizeof(INPUT))
-                    
-                time.sleep(0.01)
-                shift_up = make_keyboard_input(0x10, is_key_up=True, hardware_scancode=True)
-                user32_dll.SendInput(1, ctypes.byref(shift_up), ctypes.sizeof(INPUT))
-                logging.info(f"Batched SendInput Shift+Left × {text_len}")
+                if 0 < text_len <= MAX_RESELECT_STEPS:
+                    # Strategy B: SendInput Shift+Left × N with hardware_scancode (Batched for instant selection)
+                    shift_down = make_keyboard_input(0x10, is_key_up=False, hardware_scancode=True)
+                    user32_dll.SendInput(1, ctypes.byref(shift_down), ctypes.sizeof(INPUT))
+                    time.sleep(0.01)
+
+                    MAX_BATCH_STEPS = 500  # 1000 INPUT events per batch
+                    remaining = text_len
+                    while remaining > 0:
+                        steps_in_batch = min(MAX_BATCH_STEPS, remaining)
+                        chunk_size = steps_in_batch * 2
+                        chunk_arr = (INPUT * chunk_size)()
+                        for i in range(steps_in_batch):
+                            chunk_arr[i * 2] = make_keyboard_input(0x25, is_key_up=False, extended=True, hardware_scancode=True)
+                            chunk_arr[i * 2 + 1] = make_keyboard_input(0x25, is_key_up=True, extended=True, hardware_scancode=True)
+                        user32_dll.SendInput(chunk_size, chunk_arr, ctypes.sizeof(INPUT))
+                        remaining -= steps_in_batch
+
+                    time.sleep(0.01)
+                    shift_up = make_keyboard_input(0x10, is_key_up=True, hardware_scancode=True)
+                    user32_dll.SendInput(1, ctypes.byref(shift_up), ctypes.sizeof(INPUT))
+                    logging.info(f"Batched SendInput Shift+Left × {text_len}")
+                elif text_len > MAX_RESELECT_STEPS:
+                    logging.info(f"Skipped Shift+Left re-selection: text too long ({text_len} > {MAX_RESELECT_STEPS} steps).")
 
         time.sleep(0.01)
 
@@ -531,5 +731,5 @@ class HotkeyListener(QObject):
         self.release_all_modifiers()
 
         # ── 6. Restore clipboard ─────────────────────────────────────────────
-        pyperclip.copy(old_clipboard)
+        self.restore_clipboard(old_clipboard)
         logging.info("Буфер обміну відновлено.")

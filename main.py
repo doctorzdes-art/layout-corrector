@@ -1,6 +1,8 @@
 import sys
 import os
 import datetime
+import html
+import re
 
 # Redirect stdout/stderr in windowless mode to prevent crashes
 if sys.stdout is None:
@@ -165,6 +167,8 @@ class AppController(QObject):
         logging.info("Opening settings window...")
         if not self.settings_window:
             self.settings_window = SettingsWindow(self.config, on_saved_callback=self.on_settings_saved)
+        else:
+            self.settings_window.sync_from_config()
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
@@ -195,112 +199,125 @@ class AppController(QObject):
 
     @pyqtSlot()
     def on_replace_triggered(self):
-        if not self.is_active:
-            return
+        try:
+            if not self.is_active:
+                return
+                
+            logging.info("Replace triggered in main thread.")
+            # Capture accurate Caps Lock state globally
+            current_caps = self._get_global_capslock()
             
-        logging.info("Replace triggered in main thread.")
-        # Capture accurate Caps Lock state globally
-        current_caps = self._get_global_capslock()
-        
-        # Grab text
-        selected_text, old_clipboard = self.listener.grab_selected_text()
-        
-        if not selected_text:
-            logging.info("No text selected to replace.")
-            pyperclip.copy(old_clipboard)
-            return
-
-        # Translate (pass modifier state captured at hotkey trigger time)
-        translated = self.translator.translate(
-            selected_text,
-            trigger_shift=self.listener.trigger_shift,
-            trigger_caps=current_caps,
-        )
-        logging.info(f"Translated {len(selected_text)} chars.")
-
-        # Paste back
-        if translated and translated != selected_text:
-            select_text = self.config.settings.get("select_after_replace", True)
-            self.listener.paste_text(translated, old_clipboard, select_text=select_text)
+            # Grab text
+            selected_text, old_clipboard = self.listener.grab_selected_text()
             
-            # Auto switch system keyboard layout if enabled
-            if self.config.settings.get("auto_switch_layout", True):
-                source_lang = self.translator.detect_layout(selected_text)
-                target_lang = 'ua' if source_lang == 'en' else 'en'
-                self.listener.switch_system_layout(target_lang)
-        else:
-            pyperclip.copy(old_clipboard)
+            if not selected_text:
+                logging.info("No text selected to replace.")
+                self.listener.restore_clipboard(old_clipboard)
+                return
+
+            # Translate (pass modifier state captured at hotkey trigger time)
+            translated = self.translator.translate(
+                selected_text,
+                trigger_shift=self.listener.trigger_shift,
+                trigger_caps=current_caps,
+            )
+            logging.info(f"Translated {len(selected_text)} chars.")
+
+            # Paste back
+            if translated and translated != selected_text:
+                select_text = self.config.settings.get("select_after_replace", True)
+                self.listener.paste_text(translated, old_clipboard, select_text=select_text)
+                
+                # Auto switch system keyboard layout if enabled
+                if self.config.settings.get("auto_switch_layout", True):
+                    source_lang = self.translator.detect_layout(selected_text)
+                    target_lang = 'ua' if source_lang == 'en' else 'en'
+                    self.listener.switch_system_layout(target_lang)
+            else:
+                self.listener.restore_clipboard(old_clipboard)
+        finally:
+            self.listener.is_processing = False
 
     @pyqtSlot()
     def on_popup_triggered(self):
-        if not self.is_active:
-            return
+        try:
+            if not self.is_active:
+                return
 
-        logging.info("Popup triggered in main thread.")
-        # Capture accurate Caps Lock state globally
-        current_caps = self._get_global_capslock()
-        
-        # Grab text
-        selected_text, old_clipboard = self.listener.grab_selected_text()
-
-        # Restore clipboard immediately
-        pyperclip.copy(old_clipboard)
-
-        if not selected_text:
-            logging.info("No text selected to display in popup.")
-            return
-
-        # Translate
-        translated = self.translator.translate(
-            selected_text,
-            trigger_shift=self.listener.trigger_shift,
-            trigger_caps=current_caps,
-        )
-        logging.info(f"Translated popup text ({len(selected_text)} chars).")
-        
-        if translated and translated != selected_text:
-            self.popups = [p for p in self.popups if p.isVisible()]
+            logging.info("Popup triggered in main thread.")
+            # Capture accurate Caps Lock state globally
+            current_caps = self._get_global_capslock()
             
-            duration = self.config.settings.get("popup_duration", 5)
-            popup = TextPopup(translated, duration=duration)
-            popup.show()
-            self.popups.append(popup)
-            logging.info("Popup window shown near cursor.")
+            # Grab text
+            selected_text, old_clipboard = self.listener.grab_selected_text()
+
+            # Restore clipboard immediately
+            self.listener.restore_clipboard(old_clipboard)
+
+            if not selected_text:
+                logging.info("No text selected to display in popup.")
+                return
+
+            # Translate
+            translated = self.translator.translate(
+                selected_text,
+                trigger_shift=self.listener.trigger_shift,
+                trigger_caps=current_caps,
+            )
+            logging.info(f"Translated popup text ({len(selected_text)} chars).")
+            
+            if translated and translated != selected_text:
+                self.popups = [p for p in self.popups if p.isVisible()]
+                
+                duration = self.config.settings.get("popup_duration", 5)
+                popup = TextPopup(translated, duration=duration)
+                popup.show()
+                self.popups.append(popup)
+                logging.info("Popup window shown near cursor.")
+        finally:
+            self.listener.is_processing = False
 
     @pyqtSlot()
     def on_case_triggered(self):
-        if not self.is_active:
-            return
+        try:
+            if not self.is_active:
+                return
+                
+            logging.info("Case toggle triggered.")
+            selected_text, old_clipboard = self.listener.grab_selected_text()
+            if not selected_text:
+                logging.info("No text selected to toggle case.")
+                self.listener.restore_clipboard(old_clipboard)
+                return
+                
+            def custom_title(s):
+                # Gboard style: capitalize first letter of each word across spaces, tabs, and newlines
+                tokens = re.split(r'(\s+)', s)
+                return "".join(
+                    t[0].upper() + t[1:].lower() if t and not t.isspace() else t
+                    for t in tokens
+                )
+                
+            lower_version = selected_text.lower()
+            upper_version = selected_text.upper()
+            title_version = custom_title(selected_text)
             
-        logging.info("Case toggle triggered.")
-        selected_text, old_clipboard = self.listener.grab_selected_text()
-        if not selected_text:
-            logging.info("No text selected to toggle case.")
-            pyperclip.copy(old_clipboard)
-            return
-            
-        def custom_title(s):
-            # Gboard style: capitalize first letter of each word, rest lowercase
-            return " ".join([w[0].upper() + w[1:].lower() if len(w) > 0 else "" for w in s.split(" ")])
-            
-        lower_version = selected_text.lower()
-        upper_version = selected_text.upper()
-        title_version = custom_title(selected_text)
-        
-        # Stateless cycle: Title -> UPPER -> lower -> Title
-        if selected_text == title_version:
-            new_text = upper_version
-        elif selected_text == upper_version:
-            new_text = lower_version
-        else:
-            new_text = title_version
-            
-        logging.info(f"Toggled case ({len(selected_text)} chars).")
-        if new_text != selected_text:
-            select_text = self.config.settings.get("select_after_replace", True)
-            self.listener.paste_text(new_text, old_clipboard, select_text=select_text)
-        else:
-            pyperclip.copy(old_clipboard)
+            # Stateless cycle: Title -> UPPER -> lower -> Title
+            if selected_text == title_version:
+                new_text = upper_version
+            elif selected_text == upper_version:
+                new_text = lower_version
+            else:
+                new_text = title_version
+                
+            logging.info(f"Toggled case ({len(selected_text)} chars).")
+            if new_text != selected_text:
+                select_text = self.config.settings.get("select_after_replace", True)
+                self.listener.paste_text(new_text, old_clipboard, select_text=select_text)
+            else:
+                self.listener.restore_clipboard(old_clipboard)
+        finally:
+            self.listener.is_processing = False
 
     def quit_app(self):
         logging.info("Quitting application...")
@@ -324,10 +341,12 @@ class AppController(QObject):
             if not pixmap.isNull():
                 msg_box.setIconPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         
+        safe_new_ver = html.escape(str(new_version))
+        safe_curr_ver = html.escape(str(APP_VERSION))
         msg_box.setWindowTitle("LayoutCorrector — Доступне оновлення")
         msg_box.setText("<h3><b>Доступне оновлення LayoutCorrector</b></h3>")
         msg_box.setInformativeText(
-            f"Знайдено новішу версію програми: <b>v{new_version}</b> (поточна версія: v{APP_VERSION}).<br><br>"
+            f"Знайдено новішу версію програми: <b>v{safe_new_ver}</b> (поточна версія: v{safe_curr_ver}).<br><br>"
             "Бажаєте відкрити папку завантаження на Google Диску, щоб завантажити оновлення?"
         )
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
@@ -379,10 +398,11 @@ class AppController(QObject):
 
     def _async_update_check(self):
         import gdown
-        import re
         try:
             # Use skip_download=True to list the files in the public folder without downloading
             files = gdown.download_folder(url=UPDATE_FOLDER_URL, skip_download=True, quiet=True)
+            if not files:
+                return
 
             current_version = tuple(map(int, APP_VERSION.split('.')))
             
@@ -415,14 +435,24 @@ class AppController(QObject):
 
     def check_scheduled_update(self):
         now = datetime.datetime.now()
-        # Monday is 0 (Monday=0, Tuesday=1, ...)
-        if now.weekday() == 0 and now.hour == 6:
-            last_checked_str = self.config.settings.get("last_scheduled_update_check", "")
-            today_str = now.strftime("%Y-%m-%d")
-            if last_checked_str != today_str:
-                self.config.settings["last_scheduled_update_check"] = today_str
-                self.config.save()
-                self.run_update_check()
+        today_str = now.strftime("%Y-%m-%d")
+        last_checked_str = self.config.settings.get("last_scheduled_update_check", "")
+        if last_checked_str == today_str:
+            return
+
+        should_check = (now.weekday() == 0)  # Check on Mondays at any hour
+        if not should_check and last_checked_str:
+            try:
+                last_dt = datetime.datetime.strptime(last_checked_str, "%Y-%m-%d").date()
+                if (now.date() - last_dt).days >= 7:
+                    should_check = True
+            except ValueError:
+                should_check = True
+
+        if should_check:
+            self.config.settings["last_scheduled_update_check"] = today_str
+            self.config.save()
+            self.run_update_check()
 
 _single_instance_mutex = None
 

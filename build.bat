@@ -10,7 +10,7 @@ echo [INFO] Installing PyInstaller...
 call .\venv\Scripts\pip install pyinstaller
 
 echo [INFO] Packaging application into a single EXE file...
-call .\venv\Scripts\pyinstaller --noconsole --onefile --name "LayoutCorrector v1.13" --icon="logo.ico" --add-data "logo.png;." --clean main.py
+call .\venv\Scripts\pyinstaller --noconsole --onefile --name "LayoutCorrector v1.14" --icon="logo.ico" --add-data "logo.png;." --clean main.py
 
 if errorlevel 1 (
     echo [ERROR] Packaging failed.
@@ -18,11 +18,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-copy /y "dist\LayoutCorrector v1.13.exe" "LayoutCorrector v1.13.exe"
+copy /y "dist\LayoutCorrector v1.14.exe" "LayoutCorrector v1.14.exe"
 
 echo [SUCCESS] Packaging complete!
 echo Your standalone executable is located in:
-echo   %~dp0dist\LayoutCorrector v1.13.exe
-echo   %~dp0LayoutCorrector v1.13.exe
+echo   %~dp0dist\LayoutCorrector v1.14.exe
+echo   %~dp0LayoutCorrector v1.14.exe
 echo You can move this file anywhere and run it.
 pause

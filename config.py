@@ -6,7 +6,7 @@ import sys
 import winreg
 from logging.handlers import RotatingFileHandler
 
-APP_VERSION = "1.13"
+APP_VERSION = "1.14"
 
 FEEDBACK_URL = "https://forms.gle/VQy4R6t1m7qyAhfz5"
 UPDATE_FOLDER_URL = "https://drive.google.com/drive/folders/1LaJfRgYqFViFj--gEk_rvvvVS399sKZF"
@@ -181,29 +181,64 @@ class AppConfig:
             try:
                 with open(self.filepath, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
-                    
-                    # Safe load hotkeys
-                    for key in ["hotkey_replace", "hotkey_popup", "hotkey_case"]:
-                        if key in loaded:
-                            val = loaded[key]
-                            if isinstance(val, dict):
-                                self.settings[key].update(val)
-                            elif isinstance(val, str) and key != "hotkey_case":
-                                migrated = self._migrate_hotkey(val)
-                                if migrated:
-                                    self.settings[key] = migrated
-                                    
-                    self.settings["popup_duration"] = loaded.get("popup_duration", 5)
-                    self.settings["autorun"] = loaded.get("autorun", True)
-                    self.settings["select_after_replace"] = loaded.get("select_after_replace", True)
-                    self.settings["auto_switch_layout"] = loaded.get("auto_switch_layout", True)
-                    
-                    # Load overrides
-                    self.settings["en_to_ua_overrides"] = loaded.get("en_to_ua_overrides", {})
-                    self.settings["en_to_ua_shift_overrides"] = loaded.get("en_to_ua_shift_overrides", {})
-                    self.settings["ua_to_en_overrides"] = loaded.get("ua_to_en_overrides", {})
-                    self.settings["ua_to_en_shift_overrides"] = loaded.get("ua_to_en_shift_overrides", {})
-                    logging.info("Налаштування успішно завантажено.")
+                if not isinstance(loaded, dict):
+                    raise ValueError("Settings root must be a JSON object")
+
+                # Safe load hotkeys with type validation
+                for key in ["hotkey_replace", "hotkey_popup", "hotkey_case"]:
+                    if key in loaded:
+                        val = loaded[key]
+                        if isinstance(val, dict):
+                            mods = val.get("modifiers")
+                            vk = val.get("vk")
+                            display = val.get("display")
+                            if (
+                                isinstance(mods, list)
+                                and all(isinstance(m, str) for m in mods)
+                                and isinstance(vk, int) and not isinstance(vk, bool)
+                                and isinstance(display, str)
+                            ):
+                                self.settings[key] = {
+                                    "modifiers": mods,
+                                    "vk": vk,
+                                    "display": display,
+                                }
+                        elif isinstance(val, str) and key != "hotkey_case":
+                            migrated = self._migrate_hotkey(val)
+                            if migrated:
+                                self.settings[key] = migrated
+
+                raw_duration = loaded.get("popup_duration", 5)
+                if isinstance(raw_duration, int) and not isinstance(raw_duration, bool):
+                    self.settings["popup_duration"] = max(1, min(20, raw_duration))
+                else:
+                    self.settings["popup_duration"] = 5
+
+                for bool_key in ("autorun", "select_after_replace", "auto_switch_layout"):
+                    raw_bool = loaded.get(bool_key, True)
+                    self.settings[bool_key] = raw_bool if isinstance(raw_bool, bool) else True
+
+                raw_last_check = loaded.get("last_scheduled_update_check", "")
+                if isinstance(raw_last_check, str):
+                    self.settings["last_scheduled_update_check"] = raw_last_check
+
+                # Safe load overrides (must be dict of str -> str)
+                for ov_key in (
+                    "en_to_ua_overrides",
+                    "en_to_ua_shift_overrides",
+                    "ua_to_en_overrides",
+                    "ua_to_en_shift_overrides",
+                ):
+                    raw_ov = loaded.get(ov_key, {})
+                    if isinstance(raw_ov, dict):
+                        self.settings[ov_key] = {
+                            k: v for k, v in raw_ov.items()
+                            if isinstance(k, str) and isinstance(v, str)
+                        }
+                    else:
+                        self.settings[ov_key] = {}
+
+                logging.info("Налаштування успішно завантажено.")
             except Exception as e:
                 logging.error(f"Помилка завантаження налаштувань: {e}")
                 

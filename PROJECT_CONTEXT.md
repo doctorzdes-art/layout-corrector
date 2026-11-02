@@ -8,12 +8,10 @@
 **Layout Corrector** is a Windows tray app (Python 3 + PyQt6) that fixes text
 typed in the wrong keyboard layout (e.g. `ghbdtn` → `привіт`), UA ↔ EN ↔ RU.
 
-- Current version: **1.13** (`APP_VERSION` in `config.py`)
+- Current version: **1.14** (`APP_VERSION` in `config.py`)
 - Public repo: https://github.com/doctorzdes-art/layout-corrector (branch `main`, MIT)
-- Release tag `v1.13` is pushed. The `.exe` is attached to the GitHub Release manually
-  by the user (no `gh` CLI installed).
-- SHA-256 of `LayoutCorrector v1.13.exe`:
-  `0287B00D325C17A6076667D7D4EEF839394432AC0641F4A176DA9782A70BEC50`
+- SHA-256 of `LayoutCorrector v1.14.exe`:
+  `611BDD62B08CE0591CC82D7D8641F5A821707DFE1A4261964E04AF408794280F`
 - Feedback form: `FEEDBACK_URL` in `config.py` (Google Forms)
 - Update check: Google Drive folder `UPDATE_FOLDER_URL` (via `gdown`); version is
   parsed from exe file names like `LayoutCorrector v1.13.exe`.
@@ -37,7 +35,7 @@ All hotkeys are configurable in the Settings window.
 | `ui_settings.py` | `SettingsWindow`, `KeySequenceEdit` | cross-platform (Qt) |
 | `ui_popup.py` | `TextPopup` | cross-platform (Qt) |
 | `run.bat` | creates `venv`, installs deps, runs app with `pythonw` | Windows |
-| `build.bat` | PyInstaller `--onefile --noconsole` → `LayoutCorrector v1.13.exe` | Windows |
+| `build.bat` | PyInstaller `--onefile --noconsole` → `LayoutCorrector v1.14.exe` | Windows |
 
 Runtime paths:
 - Settings: `%USERPROFILE%\.layout_corrector_settings.json`
@@ -73,8 +71,12 @@ Runtime paths:
   (Quartz Event Taps / `pynput`, Accessibility permission), `winreg` autorun in
   `config.py` → LaunchAgent plist; layout switching via TIS APIs; build `.app` with PyInstaller.
 
-- Nov 2026 check: Google Drive update folder contains only v1.12 and v1.13.
-  **v1.14 was never built** — 1.13 is the latest Windows version.
+- Nov 2026: **v1.14** built on the new Windows PC:
+  - Smart clipboard snapshot & restore via `QClipboard`/`QMimeData` (preserves screenshots/images, copied files, HTML, colors, custom formats) + Windows 10/11 Clipboard History (`Win+V`) & Cloud Clipboard exclusion flags (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, `CanUploadToCloudClipboard`).
+  - Fixed `is_processing` concurrency lock across listener and main Qt threads (with 5s safety timeout).
+  - Upgraded `_simulate_ctrl_key` to use `SendInput` with hardware scancodes and explicit Left/Right modifier VK release/restore.
+  - Capped `Shift+Left` re-selection (`MAX_RESELECT_STEPS = 2000`) and chunked allocation to prevent `SendInput` flooding.
+  - Fixed multiline case toggle (`Ctrl+Alt+C`), scheduled weekly update checks, settings window checkbox sync from tray menu, HTML escaping in update dialog, and strict JSON settings validation.
 - A separate macOS port already exists in sibling folder `layout_corrector_macos`
   (repo https://github.com/doctorzdes-art/layout-corrector-macos, 1 commit,
   based on **v1.12**, has `.github/workflows/build-mac.yml`, `build.sh`, `run.sh`).

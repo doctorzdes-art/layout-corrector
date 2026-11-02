@@ -32,8 +32,7 @@ class LayoutTranslator:
         # Mappings are reloaded via reload() when settings are saved — no need to rebuild here
 
         current_caps = trigger_caps
-        shift_physical = trigger_shift
-            
+
         # Split text into tokens by whitespace, keeping the spaces
         tokens = re.split(r'(\s+)', text)
         result = []

@@ -685,6 +685,13 @@ class SettingsWindow(QWidget):
         self._clear_active_edit()
         self.draw_keyboards()
 
+    def sync_from_config(self):
+        """Sync UI checkboxes and spinbox with current config settings (e.g. if toggled via tray menu)."""
+        self.chk_autorun.setChecked(self.config.settings.get("autorun", True))
+        self.chk_select_after_replace.setChecked(self.config.settings.get("select_after_replace", True))
+        self.chk_auto_switch.setChecked(self.config.settings.get("auto_switch_layout", True))
+        self.spin_popup_duration.setValue(self.config.settings.get("popup_duration", 5))
+
     def save_settings(self):
         # 1. Save Hotkeys
         self.config.set_hotkey_replace(
