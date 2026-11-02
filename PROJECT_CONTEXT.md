@@ -73,6 +73,13 @@ Runtime paths:
   (Quartz Event Taps / `pynput`, Accessibility permission), `winreg` autorun in
   `config.py` → LaunchAgent plist; layout switching via TIS APIs; build `.app` with PyInstaller.
 
+- Nov 2026 check: Google Drive update folder contains only v1.12 and v1.13.
+  **v1.14 was never built** — 1.13 is the latest Windows version.
+- A separate macOS port already exists in sibling folder `layout_corrector_macos`
+  (repo https://github.com/doctorzdes-art/layout-corrector-macos, 1 commit,
+  based on **v1.12**, has `.github/workflows/build-mac.yml`, `build.sh`, `run.sh`).
+  It lags behind Windows v1.13 — changes from 1.13 need to be ported.
+
 ## 7. Open ideas / TODO
 - Screenshots in README; repo About/topics on GitHub (user to do via web UI).
 - Optional: GitHub Actions workflow to build the exe automatically on tag push
