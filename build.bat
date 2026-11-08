@@ -10,7 +10,7 @@ echo [INFO] Installing PyInstaller...
 call .\venv\Scripts\pip install pyinstaller
 
 echo [INFO] Packaging application into a single EXE file...
-call .\venv\Scripts\pyinstaller --noconsole --onefile --name "LayoutCorrector v1.14" --icon="logo.ico" --add-data "logo.png;." --clean main.py
+call .\venv\Scripts\pyinstaller --noconsole --onefile --name "LayoutCorrector v1.14" --icon="logo.ico" --add-data "logo.png;." --add-data "logo.ico;." --add-data "fonts;fonts" --add-data "icons;icons" --add-data "shapes;shapes" --add-data "theme.qss;." --add-data "design_tokens.json;." --clean main.py
 
 if errorlevel 1 (
     echo [ERROR] Packaging failed.

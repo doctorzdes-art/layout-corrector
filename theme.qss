@@ -1,0 +1,182 @@
+/* =====================================================================
+   LayoutCorrector v2 — global stylesheet (Variant A «Neon Graphite»)
+   Apply once: app.setStyleSheet(open("theme.qss", encoding="utf-8").read())
+   Widgets are selected by objectName (#name) and dynamic properties
+   ([variant="primary"]). After changing a property at runtime call
+   w.style().unpolish(w); w.style().polish(w).
+   Paths "icons/..." are relative to the app's working dir — resolve them
+   (e.g. replace "icons/" with an absolute path) before applying.
+   ===================================================================== */
+
+* {
+    font-family: "Fixel Text", "Segoe UI";
+    color: #EDEDF2;
+    outline: 0;
+}
+
+QWidget#SettingsWindow,
+QDialog#UpdateDialog { background: #0E0E11; }
+
+/* ---------------- Navigation rail ---------------- */
+QWidget#NavRail { background: #131317; }
+QToolButton#NavItem {
+    background: transparent; border: 0;
+    color: #A4A4B2; font-size: 12px; font-weight: 500;
+    padding: 0; min-width: 80px;
+}
+QToolButton#NavItem:checked { color: #EDEDF2; font-weight: 600; }
+/* The 56×32 pill behind the icon is painted in NavItem.paintEvent
+   (primary_container #173A63 when checked; #202027 on hover). */
+QLabel#NavVersion { color: #8B8B99; font-size: 11px; font-weight: 500; }
+
+/* ---------------- Page header ---------------- */
+QLabel#BrandEyebrow { color: #7FE0F9; font-size: 13px; font-weight: 600; }
+QLabel#PageTitle   { font-family: "Fixel Display"; font-size: 34px; font-weight: 700; }
+
+/* ---------------- Cards & sections ---------------- */
+QFrame#Card { background: #18181D; border-radius: 28px; }
+QLabel#SectionLabel {
+    color: #A4A4B2; font-size: 13px; font-weight: 600;
+    padding: 12px 16px 6px 16px;          /* text-transform uppercase: pass upper() text */
+}
+QLabel#RowTitle { font-size: 15px; font-weight: 500; }
+QLabel#RowHint  { color: #A4A4B2; font-size: 13px; }
+QLabel#IconTile { background: #202027; border-radius: 14px; }       /* 40×40 */
+QLabel#IconTile[round="true"] { border-radius: 20px; }
+
+/* ---------------- Buttons ---------------- */
+QPushButton {
+    border: 0; border-radius: 24px; padding: 0 22px;
+    min-height: 48px; font-size: 15px; font-weight: 600;
+}
+QPushButton[variant="primary"]        { background: #4BA7F4; color: #03213F; }
+QPushButton[variant="primary"]:hover  { background: #6BB8F6; }
+QPushButton[variant="primary"]:pressed{ background: #3A8DF3; }
+QPushButton[variant="primary"][saved="true"] { background: #202027; color: #A4A4B2; }
+
+QPushButton[variant="tonal"]          { background: #202027; color: #EDEDF2; font-weight: 500; }
+QPushButton[variant="tonal"]:hover    { background: #2A2A33; }
+
+QPushButton[variant="container"]      { background: #173A63; color: #D3E7FF; border: 2px solid #173A63; }
+QPushButton[variant="container"]:hover{ background: #1D4776; border-color: #1D4776; }
+
+QPushButton[variant="outline-glow"]   { background: transparent; color: #7FE0F9; border: 2px solid #7FE0F9; }
+
+QPushButton[variant="text"]           { background: transparent; color: #4BA7F4; }
+QPushButton[variant="text"]:hover     { background: rgba(75,167,244,0.10); }
+
+QPushButton[size="small"] { min-height: 40px; border-radius: 20px; font-size: 14px; padding: 0 16px; }
+QPushButton[size="popup"] { min-height: 44px; border-radius: 22px; font-size: 14px; }
+QPushButton[size="cta"]   { min-height: 52px; border-radius: 26px; padding: 0 26px; }
+
+/* Segmented "Звичайні | ⇧ Shift" (exclusive QButtonGroup, checkable) */
+QPushButton#SegLeft, QPushButton#SegRight {
+    min-height: 40px; padding: 0 18px; font-size: 14px; font-weight: 600;
+    background: #202027; color: #C9C9D4;
+}
+QPushButton#SegLeft  { border-radius: 0; border-top-left-radius: 20px; border-bottom-left-radius: 20px;
+                       border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+QPushButton#SegRight { border-radius: 0; border-top-right-radius: 20px; border-bottom-right-radius: 20px;
+                       border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+QPushButton#SegLeft:checked, QPushButton#SegRight:checked { background: #4BA7F4; color: #03213F; }
+
+/* ---------------- Switch (QCheckBox, text empty, label is a separate RowTitle) ---------------- */
+QCheckBox#Switch { spacing: 0; }
+QCheckBox#Switch::indicator { width: 52px; height: 32px; }
+QCheckBox#Switch::indicator:unchecked { image: url(icons/switch_off.svg); }
+QCheckBox#Switch::indicator:checked   { image: url(icons/switch_on.svg); }
+
+/* ---------------- Stepper (popup duration) ---------------- */
+QFrame#Stepper { background: #202027; border-radius: 22px; }
+QPushButton#StepMinus { min-height: 36px; min-width: 36px; max-width: 36px; padding: 0;
+                        border-radius: 18px; background: #2A2A33; color: #EDEDF2; font-size: 20px; font-weight: 400; }
+QPushButton#StepPlus  { min-height: 36px; min-width: 36px; max-width: 36px; padding: 0;
+                        border-radius: 12px; background: #4BA7F4; color: #03213F; font-size: 20px; font-weight: 400; }
+QLabel#StepValue { font-family: "Fixel Display"; font-size: 17px; font-weight: 600; min-width: 52px; qproperty-alignment: AlignCenter; }
+
+/* ---------------- Hotkey tiles ---------------- */
+QFrame#HotkeyTile { background: #202027; border: 2px solid transparent; border-radius: 22px; }
+QFrame#HotkeyTile[recording="true"] { background: #0F2A33; border: 2px solid #7FE0F9; }
+QLabel#TileTitle { font-size: 15px; font-weight: 600; }
+QLabel#TileHint  { color: #A4A4B2; font-size: 12px; }
+QFrame#HotkeyTile[recording="true"] QLabel#TileHint { color: #7FE0F9; font-weight: 600; }
+QLabel#KeyChip {
+    font-family: "Fixel Display"; font-size: 13px; font-weight: 600;
+    background: #2A2A33; border-radius: 9px; border-bottom: 2px solid #3A3A45;
+    min-height: 28px; min-width: 12px; padding: 0 9px;
+}
+/* recording: keep chips visible, dim them (use QGraphicsOpacityEffect 0.55) + dashed glow border */
+QFrame#HotkeyTile[recording="true"] QLabel#KeyChip { border: 1px dashed #7FE0F9; color: #A4A4B2; }
+
+/* ---------------- Layout editor ---------------- */
+QLabel#EditorHint { color: #A4A4B2; font-size: 13px; }
+QLabel#EditorHint[active="true"] { color: #7FE0F9; font-weight: 600; }
+QLabel#DirChip { font-family: "Fixel Display"; font-size: 13px; font-weight: 600;
+                 background: #173A63; color: #D3E7FF; border-radius: 14px; min-height: 28px; padding: 0 12px; }
+QLabel#KeyboardTitle { font-size: 15px; font-weight: 500; }
+
+QPushButton#CharKey {
+    min-height: 44px; max-height: 44px; padding: 0; border-radius: 12px;
+    background: #23232B; border: 2px solid transparent;
+}
+QPushButton#CharKey:hover   { background: #2A2A33; }
+QPushButton#CharKey[selected="true"] { background: #0F2A33; border: 2px solid #7FE0F9; }
+/* The two labels (main char top-left 16px, translation bottom-right 13px
+   #4BA7F4, or #7FE0F9 when selected) are drawn in CharKey.paintEvent. */
+QLabel#ModKey {
+    min-height: 44px; max-height: 44px; border-radius: 12px;
+    background: #131317; color: #7C7C8A; font-size: 12px; font-weight: 500;
+    qproperty-alignment: AlignCenter;
+}
+
+/* ---------------- Feedback page ---------------- */
+QLabel#HeroTitle { font-family: "Fixel Display"; font-size: 30px; font-weight: 700; }
+QLabel#HeroText  { color: #A4A4B2; font-size: 15px; }
+QFrame#StepCard  { background: #202027; border-radius: 20px; }
+QLabel#StepNum   { font-family: "Fixel Display"; font-size: 22px; font-weight: 700; color: #4BA7F4; }
+QPushButton#VersionChip { min-height: 24px; border-radius: 12px; padding: 0 8px;
+                          background: #173A63; color: #D3E7FF; font-size: 13px; font-weight: 600; }
+QFrame#Snackbar { background: #EDEDF2; border-radius: 16px; }
+QFrame#Snackbar QLabel { color: #18181D; font-size: 14px; font-weight: 500; }
+QFrame#Snackbar QPushButton { background: transparent; color: #1D5FB0; min-height: 36px; border-radius: 18px; padding: 0 14px; font-size: 14px; }
+
+/* ---------------- Popup (TextPopup) ---------------- */
+QFrame#PopupContainer { background: #18181D; border: 1px solid #2A2A33; border-radius: 24px; }
+QLabel#PopupTitle  { color: #4BA7F4; font-size: 13px; font-weight: 600; }
+QLabel#PopupDir    { background: #202027; color: #A4A4B2; font-size: 12px; font-weight: 600;
+                     border-radius: 12px; min-height: 24px; padding: 0 9px; }
+QPushButton#PopupClose { min-height: 32px; max-height: 32px; min-width: 32px; max-width: 32px; padding: 0;
+                         border-radius: 16px; background: #202027; color: #A4A4B2; font-size: 14px; }
+QPushButton#PopupClose:hover { background: #2A2A33; color: #EDEDF2; }
+QLabel#PopupOriginal { color: #7C7C8A; font-size: 13px; }   /* setStrikeOut(True) on its QFont */
+QLabel#PopupText     { font-family: "Fixel Display"; font-size: 22px; font-weight: 600; }
+QProgressBar#PopupTimer { background: #26262E; border: 0; border-radius: 2px; max-height: 4px; min-height: 4px; }
+QProgressBar#PopupTimer::chunk { background: #7FE0F9; border-radius: 2px; }
+
+/* ---------------- Tray menu (QMenu) ---------------- */
+QMenu {
+    background: #18181D; border: 1px solid #2A2A33; border-radius: 20px;
+    padding: 8px;
+}
+QMenu::item {
+    min-height: 44px; padding: 0 12px 0 12px; border-radius: 12px;
+    font-size: 14px; color: #EDEDF2; background: transparent;
+}
+QMenu::item:selected { background: #202027; }
+QMenu::separator { height: 1px; background: #2A2A33; margin: 6px 8px; }
+QMenu::indicator { width: 40px; height: 24px; subcontrol-position: right center; right: 12px; }
+QMenu::indicator:non-exclusive:unchecked { image: url(icons/switch_sm_off.svg); }
+QMenu::indicator:non-exclusive:checked   { image: url(icons/switch_sm_on.svg); }
+QMenu::icon { padding-left: 12px; }
+/* "Вихід" action: QMenu can't colour one item via QSS — use a QWidgetAction
+   with a QLabel styled color:#FFB4AB, or set a custom icon tinted #FFB4AB. */
+
+/* ---------------- Update dialog ---------------- */
+QFrame#DialogCard  { background: #202027; border-radius: 28px; }
+QLabel#DialogTitle { font-family: "Fixel Display"; font-size: 24px; font-weight: 700; }
+QLabel#DialogText  { color: #B4B4C0; font-size: 14px; }
+
+/* ---------------- Scrollbars (if any page scrolls) ---------------- */
+QScrollBar:vertical { background: transparent; width: 10px; margin: 4px; }
+QScrollBar::handle:vertical { background: #2A2A33; border-radius: 3px; min-height: 40px; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; }

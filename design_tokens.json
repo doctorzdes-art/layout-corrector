@@ -1,0 +1,122 @@
+{
+  "project": "LayoutCorrector",
+  "redesign": "v2 — Variant A «Neon Graphite» + hotkey tiles from Variant C",
+  "base_colors_from_logo": {
+    "logo_blue": "#3A8DF3",
+    "logo_blue_light": "#4BA7F4",
+    "logo_glow_cyan": "#7FE0F9",
+    "logo_graphite": "#111113 → #222127"
+  },
+  "color": {
+    "bg_app": "#0E0E11",
+    "bg_rail": "#131317",
+    "surface_card": "#18181D",
+    "surface_control": "#202027",
+    "surface_control_high": "#2A2A33",
+    "surface_key": "#23232B",
+    "surface_mod_key": "#131317",
+    "divider": "#2A2A33",
+    "outline_switch_off": "#5A5A68",
+    "keycap_bottom_edge": "#3A3A45",
+    "text_primary": "#EDEDF2",
+    "text_secondary": "#A4A4B2",
+    "text_tertiary": "#8B8B99",
+    "text_mod_key": "#7C7C8A",
+    "text_strikethrough": "#7C7C8A",
+    "primary": "#4BA7F4",
+    "on_primary": "#03213F",
+    "primary_container": "#173A63",
+    "on_primary_container": "#D3E7FF",
+    "accent_glow": "#7FE0F9",
+    "accent_glow_container": "#0F2A33",
+    "switch_thumb_off": "#8F8F9E",
+    "danger_text": "#FFB4AB",
+    "snackbar_bg": "#EDEDF2",
+    "snackbar_text": "#18181D",
+    "snackbar_action": "#1D5FB0",
+    "hotkey_tile_tones": {
+      "fix":   { "shape": "cookie9", "fill": "#173A63", "ink": "#D3E7FF" },
+      "popup": { "shape": "clover4", "fill": "#0F3A44", "ink": "#B5EEFC" },
+      "case":  { "shape": "flower6", "fill": "#26305A", "ink": "#CDD6FF" }
+    }
+  },
+  "typography": {
+    "display_family": "Fixel Display",
+    "text_family": "Fixel Text",
+    "fallback": "Segoe UI",
+    "styles_px": {
+      "page_title":        { "family": "display", "size": 34, "weight": 700, "letter_spacing_em": -0.01 },
+      "feedback_hero":     { "family": "display", "size": 30, "weight": 700 },
+      "dialog_title":      { "family": "display", "size": 24, "weight": 700 },
+      "popup_result":      { "family": "display", "size": 22, "weight": 600 },
+      "feedback_step_num": { "family": "display", "size": 22, "weight": 700 },
+      "stepper_value":     { "family": "display", "size": 17, "weight": 600 },
+      "key_main":          { "family": "display", "size": 16, "weight": 600 },
+      "key_translation":   { "family": "display", "size": 13, "weight": 600 },
+      "keycap_chip":       { "family": "display", "size": 13, "weight": 600 },
+      "chip_tag":          { "family": "display", "size": 13, "weight": 600 },
+      "row_title":         { "family": "text", "size": 15, "weight": 500 },
+      "tile_title":        { "family": "text", "size": 15, "weight": 600 },
+      "button":            { "family": "text", "size": 15, "weight": 600 },
+      "button_small":      { "family": "text", "size": 14, "weight": 600 },
+      "body":              { "family": "text", "size": 14, "weight": 400 },
+      "row_hint":          { "family": "text", "size": 13, "weight": 400 },
+      "tile_hint":         { "family": "text", "size": 12, "weight": 400, "line_height": 1.4 },
+      "section_label":     { "family": "text", "size": 13, "weight": 600, "uppercase": true, "letter_spacing_em": 0.04 },
+      "brand_eyebrow":     { "family": "text", "size": 13, "weight": 600, "color": "accent_glow" },
+      "nav_label":         { "family": "text", "size": 12, "weight": "500 (active: 600)" },
+      "mod_key":           { "family": "text", "size": 12, "weight": 500 },
+      "version":           { "family": "text", "size": 11, "weight": 500 }
+    }
+  },
+  "radius_px": {
+    "card": 28, "hotkey_tile": 22, "popup": 24, "dialog": 28, "tray_menu": 20,
+    "feedback_step": 20, "key": 12, "menu_item": 12, "icon_tile_square": 14, "keycap": 9,
+    "pill": "height / 2 (all buttons, chips, switches, nav indicator)",
+    "segmented_left": "20 8 8 20", "segmented_right": "8 20 20 8",
+    "stepper_plus_btn": 12
+  },
+  "spacing_px": {
+    "window": { "width": 950, "height": 800 },
+    "nav_rail_width": 96,
+    "nav_rail_padding_v": 20,
+    "nav_item_gap": 6,
+    "logo_in_rail": 44,
+    "logo_margin_bottom": 22,
+    "content_padding": [28, 32, 24, 28],
+    "content_section_gap": 18,
+    "card_padding": 8,
+    "card_section_label_padding": [12, 16, 6, 16],
+    "settings_row_padding": [6, 16],
+    "settings_row_min_height": 52,
+    "settings_row_gap": 14,
+    "hotkey_tiles_columns": 3,
+    "hotkey_tiles_gap": 8,
+    "hotkey_tile_padding": 16,
+    "hotkey_tile_inner_gap": 8,
+    "keyboard_key_gap": 5,
+    "keyboard_row_gap": 5,
+    "keyboard_card_padding": [14, 16, 16, 16]
+  },
+  "sizes_px": {
+    "button_header": 48, "button_tile": 40, "button_popup": 44, "button_dialog": 44, "button_feedback_cta": 52,
+    "nav_indicator": [56, 32], "icon_nav": 22, "icon_row": 20, "icon_tile_box": 40,
+    "switch": [52, 32], "switch_thumb_on": 24, "switch_thumb_off": 16, "switch_small": [40, 24],
+    "stepper_btn": 36, "keycap_chip_height": 30, "hotkey_shape": 48, "feedback_shape": 148,
+    "key_height": 44, "popup_width": 380, "popup_close": 32, "tray_width": 300, "tray_item_height": 44,
+    "update_dialog_width": 400, "update_logo": 64, "popup_progress_height": 4
+  },
+  "keyboard_units": {
+    "note": "Key width = units × U, use as QHBoxLayout stretch factors ×4 (all rows = 60).",
+    "row1": ["13 × 1u char keys", "Backspace 2u"],
+    "row2": ["Tab 1.5u", "12 × 1u", "\\ 1.5u (char key)"],
+    "row3": ["Caps Lock 1.75u", "11 × 1u", "Enter 2.25u"],
+    "row4": ["Shift 2.25u", "10 × 1u", "Shift 2.75u"],
+    "stretch_x4": { "1u": 4, "1.5u": 6, "1.75u": 7, "2u": 8, "2.25u": 9, "2.75u": 11 }
+  },
+  "shadow_QGraphicsDropShadowEffect": {
+    "popup_tray": { "blurRadius": 32, "offset": [0, 12], "color": "rgba(0,0,0,140)" },
+    "dialog":     { "blurRadius": 40, "offset": [0, 16], "color": "rgba(0,0,0,150)" },
+    "snackbar":   { "blurRadius": 28, "offset": [0, 10], "color": "rgba(0,0,0,128)" }
+  }
+}

@@ -8,10 +8,10 @@
 **Layout Corrector** is a Windows tray app (Python 3 + PyQt6) that fixes text
 typed in the wrong keyboard layout (e.g. `ghbdtn` → `привіт`), UA ↔ EN ↔ RU.
 
-- Current version: **1.14** (`APP_VERSION` in `config.py`)
+- Current version: **1.14** (`APP_VERSION` in `config.py`) / **UI Redesign v2 (Material 3 Expressive)**
 - Public repo: https://github.com/doctorzdes-art/layout-corrector (branch `main`, MIT)
 - SHA-256 of `LayoutCorrector v1.14.exe`:
-  `611BDD62B08CE0591CC82D7D8641F5A821707DFE1A4261964E04AF408794280F`
+  `9EAD447963446C0E6995DC31825E09DBC309EB9B0A6E4CC41FD6C483D9479A12`
 - Feedback form: `FEEDBACK_URL` in `config.py` (Google Forms)
 - Update check: Google Drive folder `UPDATE_FOLDER_URL` (via `gdown`); version is
   parsed from exe file names like `LayoutCorrector v1.13.exe`.
@@ -19,23 +19,30 @@ typed in the wrong keyboard layout (e.g. `ghbdtn` → `привіт`), UA ↔ EN
 ## 2. Default hotkeys
 | Action | Hotkey |
 |---|---|
-| Fix layout of selected text / last word | `Ctrl+Alt+Z` |
-| Show converted text in popup (no replace) | `Ctrl+Alt+X` |
-| Change case | `Ctrl+Alt+C` |
+| Fix layout of selected text / last word | `Ctrl+Shift+Z` |
+| Show converted text in popup (no replace) | `Ctrl+Shift+X` |
+| Change case | `Ctrl+Shift+C` |
 
 All hotkeys are configurable in the Settings window.
 
-## 3. Architecture
+## 3. Architecture & Files
 | File | Role | Platform |
 |---|---|---|
-| `main.py` | `AppController`: tray icon/menu, signal wiring, update check, single-instance check | cross-platform (Qt) |
+| `main.py` | `AppController`: tray icon/menu, signal wiring, update check, single-instance check, exit widget | cross-platform (Qt) |
 | `config.py` | `AppConfig` (settings JSON), logging, autorun (`winreg`), version helpers | **Windows-specific** (`winreg`) |
 | `hotkey_listener.py` | Global hotkeys, `SendInput`, clipboard copy/paste, caret handling, layout switch | **Windows-specific** (`ctypes.windll.user32`) |
 | `translator.py` | `LayoutTranslator`: character maps UA/EN/RU | cross-platform |
-| `ui_settings.py` | `SettingsWindow`, `KeySequenceEdit` | cross-platform (Qt) |
-| `ui_popup.py` | `TextPopup` | cross-platform (Qt) |
+| `ui_common.py` | Typography (Fixel font loading), SVG color tinting, shape compositing, QSS theme loader | cross-platform (Qt) |
+| `ui_settings.py` | `SettingsWindow`: NavRail, Hotkeys & Options, Symmetric Layout Editor, Feedback Page | cross-platform (Qt) |
+| `ui_popup.py` | `TextPopup`: 380px dark card, direction chip, strikethrough original, timer bar with hover-pause | cross-platform (Qt) |
+| `ui_dialog.py` | `UpdateDialog`: custom 400px frameless dialog with 64px logo | cross-platform (Qt) |
+| `theme.qss` | Complete QSS stylesheet matching Material 3 Expressive ("Neon Graphite" palette) | cross-platform (Qt) |
+| `design_tokens.json` | Design tokens: colors, typography, border radiuses, spacing | cross-platform |
+| `fonts/` | MacPaw Fixel Display (Bold, SemiBold, Medium) & Fixel Text (Regular, Medium, SemiBold) | TTF (OFL 1.1) |
+| `icons/` | 20 SVGs for navigation, hotkeys, switches, check, copy, exit, external | SVG |
+| `shapes/` | 3 Material Expressive shape backgrounds (`cookie9.svg`, `clover4.svg`, `flower6.svg`) | SVG |
 | `run.bat` | creates `venv`, installs deps, runs app with `pythonw` | Windows |
-| `build.bat` | PyInstaller `--onefile --noconsole` → `LayoutCorrector v1.14.exe` | Windows |
+| `build.bat` | PyInstaller `--onefile --noconsole` bundling assets → `LayoutCorrector v1.14.exe` | Windows |
 
 Runtime paths:
 - Settings: `%USERPROFILE%\.layout_corrector_settings.json`
@@ -72,18 +79,21 @@ Runtime paths:
   `config.py` → LaunchAgent plist; layout switching via TIS APIs; build `.app` with PyInstaller.
 
 - Nov 2026: **v1.14** built on the new Windows PC:
-  - Smart clipboard snapshot & restore via `QClipboard`/`QMimeData` (preserves screenshots/images, copied files, HTML, colors, custom formats) + Windows 10/11 Clipboard History (`Win+V`) & Cloud Clipboard exclusion flags (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, `CanUploadToCloudClipboard`).
+  - Smart clipboard snapshot & restore via Win32 Clipboard API (preserves screenshots/images, copied files, HTML, colors, custom formats) + Windows 10/11 Clipboard History (`Win+V`) & Cloud Clipboard exclusion flags.
   - Fixed `is_processing` concurrency lock across listener and main Qt threads (with 5s safety timeout).
-  - Upgraded `_simulate_ctrl_key` to use `SendInput` with hardware scancodes and explicit Left/Right modifier VK release/restore.
+  - Safe keybd_event modifier release and restore during Ctrl+Shift+Z execution.
   - Capped `Shift+Left` re-selection (`MAX_RESELECT_STEPS = 2000`) and chunked allocation to prevent `SendInput` flooding.
-  - Fixed multiline case toggle (`Ctrl+Alt+C`), scheduled weekly update checks, settings window checkbox sync from tray menu, HTML escaping in update dialog, and strict JSON settings validation.
-- A separate macOS port already exists in sibling folder `layout_corrector_macos`
-  (repo https://github.com/doctorzdes-art/layout-corrector-macos, 1 commit,
-  based on **v1.12**, has `.github/workflows/build-mac.yml`, `build.sh`, `run.sh`).
-  It lags behind Windows v1.13 — changes from 1.13 need to be ported.
+  - Fixed multiline case toggle (`Ctrl+Shift+C`), scheduled weekly update checks, settings window checkbox sync from tray menu, HTML escaping in update dialog, and strict JSON settings validation.
 
-## 7. Open ideas / TODO
-- Screenshots in README; repo About/topics on GitHub (user to do via web UI).
-- Optional: GitHub Actions workflow to build the exe automatically on tag push
-  (would further increase trust — build is reproducible from public source).
-- Optional: macOS version (see above).
+- Nov 2026: **UI Redesign v2 (Material 3 Expressive / Neon Graphite)**:
+  - Complete modern redesign implemented based on Claude Design handoff kit (`LayoutCorrector_Redesign`).
+  - Integrated MacPaw Fixel typography (Display 700/600/500 and Text 600/500/400).
+  - Replaced legacy `QTabWidget` with a vertical `NavRail` (96px) with 56×32 indicator pills and uncompromised logo.
+  - Page 1: General options cards with animated SVG switches and popup duration stepper; Hotkey tiles with Material Expressive background shapes (`cookie9`, `clover4`, `flower6`), always-visible key chips, and in-place recording mode (`grabKeyboard`, Esc cancel).
+  - Page 2: Symmetric unit-based layout editor with segmented toggle ("Звичайні | ⇧ Shift"), `CharKey` dual-character display without "?", and physical keyboard mapping.
+  - Page 3: Feedback hero card with `cookie9` shape, Google Forms CTA, Snackbar toast notification, and 3 step cards with copyable version chip.
+  - `TextPopup`: 380px width, `#18181D` card, 24px radius, direction chip, strikethrough original text, 22px translated text, full-width copy button, and 4px progress timer with hover-pause.
+  - `UpdateDialog`: custom frameless translucent dialog with 64px logo and modern buttons.
+  - Tray Menu: dark translucent styling, switch indicators, and red `#FFB4AB` exit action.
+  - Fixed Ukrainian spelling: "Зворотний зв’язок" everywhere.
+  - PyInstaller `--add-data` updated in `build.bat` to bundle fonts, icons, shapes, theme, and tokens.

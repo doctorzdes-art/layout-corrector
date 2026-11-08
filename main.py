@@ -3,6 +3,7 @@ import os
 import datetime
 import html
 import re
+from pathlib import Path
 
 # Redirect stdout/stderr in windowless mode to prevent crashes
 if sys.stdout is None:
@@ -12,7 +13,10 @@ if sys.stderr is None:
 
 import logging
 import pyperclip
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtWidgets import (
+    QApplication, QSystemTrayIcon, QMenu, QWidgetAction,
+    QWidget, QHBoxLayout, QLabel, QDialog
+)
 from PyQt6.QtCore import Qt, QObject, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 
@@ -25,12 +29,50 @@ from translator import LayoutTranslator
 from hotkey_listener import HotkeyListener
 from ui_settings import SettingsWindow
 from ui_popup import TextPopup
+from ui_dialog import UpdateDialog
+import ui_common
 
 def exception_hook(exctype, value, traceback):
     logging.error("Uncaught exception:", exc_info=(exctype, value, traceback))
     sys.__excepthook__(exctype, value, traceback)
 
 sys.excepthook = exception_hook
+
+class ExitMenuItem(QWidget):
+    def __init__(self, on_trigger, parent=None):
+        super().__init__(parent)
+        self.on_trigger = on_trigger
+        self.setFixedHeight(44)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(12)
+
+        base_dir = Path(get_resource_path("icons")).parent
+        icon_lbl = QLabel(self)
+        icon_path = base_dir / "icons" / "exit.svg"
+        if icon_path.exists():
+            icon_lbl.setPixmap(ui_common.svg_pixmap(icon_path, "#FFB4AB", 18))
+        layout.addWidget(icon_lbl)
+
+        text_lbl = QLabel("Вихід", self)
+        text_lbl.setStyleSheet("color: #FFB4AB; font-size: 14px; font-weight: 500; background: transparent;")
+        layout.addWidget(text_lbl)
+        layout.addStretch()
+
+    def enterEvent(self, e):
+        self.setStyleSheet("background-color: #202027; border-radius: 12px;")
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.setStyleSheet("background-color: transparent;")
+        super().leaveEvent(e)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            if self.on_trigger:
+                self.on_trigger()
+        super().mousePressEvent(e)
 
 class AppController(QObject):
     update_available_signal = pyqtSignal(str)
@@ -40,10 +82,10 @@ class AppController(QObject):
         logging.info("Initializing AppController...")
         self.app = app
         self.config = AppConfig()
-        
+
         # Sync Windows autorun on startup
         set_windows_autorun(self.config.settings.get("autorun", True))
-        
+
         self.translator = LayoutTranslator(self.config)
         self.listener = HotkeyListener(self.config)
         self.settings_window = None
@@ -56,7 +98,7 @@ class AppController(QObject):
         self.listener.signals.case_trigger.connect(self.on_case_triggered)
 
         self.logo_path = get_resource_path("logo.png")
-        
+
         # Create Tray Icon
         self.tray_icon = QSystemTrayIcon(self)
         logo_icon = QIcon(self.logo_path)
@@ -65,77 +107,97 @@ class AppController(QObject):
         else:
             self.tray_icon.setIcon(self.create_tray_icon())
         self.tray_icon.setToolTip("Автоматичне виправлення розкладки (Активно)")
-        
+
         # Build Tray Menu
         self.tray_menu = QMenu()
-        
+        self.tray_menu.setWindowFlags(
+            self.tray_menu.windowFlags() |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.NoDropShadowWindowHint
+        )
+        self.tray_menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
         self.act_toggle = self.tray_menu.addAction("Увімкнено")
         self.act_toggle.setCheckable(True)
         self.act_toggle.setChecked(True)
         self.act_toggle.triggered.connect(self.toggle_active)
-        
+
         self.act_select = self.tray_menu.addAction("Виділяти виправлений текст")
         self.act_select.setCheckable(True)
         self.act_select.setChecked(self.config.settings.get("select_after_replace", True))
         self.act_select.triggered.connect(self.toggle_select_after_replace)
-        
+
         self.act_auto_switch = self.tray_menu.addAction("Змінювати мову введення")
         self.act_auto_switch.setCheckable(True)
         self.act_auto_switch.setChecked(self.config.settings.get("auto_switch_layout", True))
         self.act_auto_switch.triggered.connect(self.toggle_auto_switch_layout)
-        
+
         self.tray_menu.addSeparator()
-        
-        self.act_settings = self.tray_menu.addAction("Налаштування...")
+
+        base_dir = Path(get_resource_path("icons")).parent
+
+        self.act_settings = self.tray_menu.addAction("Налаштування…")
+        settings_icon_path = base_dir / "icons" / "settings.svg"
+        if settings_icon_path.exists():
+            self.act_settings.setIcon(ui_common.svg_icon(settings_icon_path, "#A4A4B2", 18))
         self.act_settings.triggered.connect(self.open_settings)
-        
-        self.act_feedback = self.tray_menu.addAction("Зворотній зв'язок...")
+
+        self.act_feedback = self.tray_menu.addAction("Зворотний зв’язок…")
+        fb_icon_path = base_dir / "icons" / "nav_feedback.svg"
+        if fb_icon_path.exists():
+            self.act_feedback.setIcon(ui_common.svg_icon(fb_icon_path, "#A4A4B2", 18))
         self.act_feedback.triggered.connect(self.open_feedback)
-        
+
         self.tray_menu.addSeparator()
-        
-        self.act_exit = self.tray_menu.addAction("Вихід")
-        self.act_exit.triggered.connect(self.quit_app)
-        
+
+        exit_action = QWidgetAction(self.tray_menu)
+        exit_item = ExitMenuItem(self._on_tray_exit_clicked, self.tray_menu)
+        exit_action.setDefaultWidget(exit_item)
+        self.tray_menu.addAction(exit_action)
+
         self.tray_icon.setContextMenu(self.tray_menu)
         self.tray_icon.activated.connect(self.on_tray_activated)
-        
+
         self.tray_icon.show()
         logging.info("Tray icon displayed.")
-        
+
         # Start background hotkey listener
         self.listener.start()
 
         # Connect update signal and start timer
         self.update_available_signal.connect(self.show_update_dialog)
-        
+
         # Setup update check timer (10 mins)
         from PyQt6.QtCore import QTimer
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.check_scheduled_update)
         self.update_timer.start(600000)
-        
+
         # Trigger initial check 5 seconds after startup
         QTimer.singleShot(5000, self.run_update_check)
+
+    def _on_tray_exit_clicked(self):
+        self.tray_menu.close()
+        self.quit_app()
 
     def create_tray_icon(self):
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor("transparent"))
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # Outer circle
-        painter.setBrush(QColor("#00ADB5"))
+        painter.setBrush(QColor("#4BA7F4"))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(2, 2, 28, 28)
-        
+
         # Keyboard symbol
-        painter.setPen(QColor("#FFFFFF"))
-        font = QFont("Segoe UI", 16, QFont.Weight.Bold)
+        painter.setPen(QColor("#03213F"))
+        font = ui_common.display_font(16, QFont.Weight.Bold)
         painter.setFont(font)
         painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "⌨")
         painter.end()
-        
+
         return QIcon(pixmap)
 
     def toggle_active(self, checked):
@@ -185,7 +247,7 @@ class AppController(QObject):
         import ctypes
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
-        
+
         fg_hwnd = user32.GetForegroundWindow()
         if fg_hwnd:
             fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None)
@@ -202,14 +264,14 @@ class AppController(QObject):
         try:
             if not self.is_active:
                 return
-                
+
             logging.info("Replace triggered in main thread.")
             # Capture accurate Caps Lock state globally
             current_caps = self._get_global_capslock()
-            
+
             # Grab text
             selected_text, old_clipboard = self.listener.grab_selected_text()
-            
+
             if not selected_text:
                 logging.info("No text selected to replace.")
                 self.listener.restore_clipboard(old_clipboard)
@@ -227,7 +289,7 @@ class AppController(QObject):
             if translated and translated != selected_text:
                 select_text = self.config.settings.get("select_after_replace", True)
                 self.listener.paste_text(translated, old_clipboard, select_text=select_text)
-                
+
                 # Auto switch system keyboard layout if enabled
                 if self.config.settings.get("auto_switch_layout", True):
                     source_lang = self.translator.detect_layout(selected_text)
@@ -247,7 +309,7 @@ class AppController(QObject):
             logging.info("Popup triggered in main thread.")
             # Capture accurate Caps Lock state globally
             current_caps = self._get_global_capslock()
-            
+
             # Grab text
             selected_text, old_clipboard = self.listener.grab_selected_text()
 
@@ -265,12 +327,20 @@ class AppController(QObject):
                 trigger_caps=current_caps,
             )
             logging.info(f"Translated popup text ({len(selected_text)} chars).")
-            
+
             if translated and translated != selected_text:
                 self.popups = [p for p in self.popups if p.isVisible()]
-                
+
+                source_lang = self.translator.detect_layout(selected_text)
+                direction = "EN → UA" if source_lang == "en" else "UA → EN"
                 duration = self.config.settings.get("popup_duration", 5)
-                popup = TextPopup(translated, duration=duration)
+
+                popup = TextPopup(
+                    translated,
+                    original_text=selected_text,
+                    direction=direction,
+                    duration=duration
+                )
                 popup.show()
                 self.popups.append(popup)
                 logging.info("Popup window shown near cursor.")
@@ -282,14 +352,14 @@ class AppController(QObject):
         try:
             if not self.is_active:
                 return
-                
+
             logging.info("Case toggle triggered.")
             selected_text, old_clipboard = self.listener.grab_selected_text()
             if not selected_text:
                 logging.info("No text selected to toggle case.")
                 self.listener.restore_clipboard(old_clipboard)
                 return
-                
+
             def custom_title(s):
                 # Gboard style: capitalize first letter of each word across spaces, tabs, and newlines
                 tokens = re.split(r'(\s+)', s)
@@ -297,11 +367,11 @@ class AppController(QObject):
                     t[0].upper() + t[1:].lower() if t and not t.isspace() else t
                     for t in tokens
                 )
-                
+
             lower_version = selected_text.lower()
             upper_version = selected_text.upper()
             title_version = custom_title(selected_text)
-            
+
             # Stateless cycle: Title -> UPPER -> lower -> Title
             if selected_text == title_version:
                 new_text = upper_version
@@ -309,7 +379,7 @@ class AppController(QObject):
                 new_text = lower_version
             else:
                 new_text = title_version
-                
+
             logging.info(f"Toggled case ({len(selected_text)} chars).")
             if new_text != selected_text:
                 select_text = self.config.settings.get("select_after_replace", True)
@@ -326,67 +396,16 @@ class AppController(QObject):
         self.app.quit()
 
     def open_feedback(self):
-        import webbrowser
-        webbrowser.open(FEEDBACK_URL)
+        self.open_settings()
+        if self.settings_window:
+            self.settings_window.nav_item_feedback.setChecked(True)
+            self.settings_window.stack.setCurrentIndex(2)
 
+    @pyqtSlot(str)
     def show_update_dialog(self, new_version):
-        from PyQt6.QtWidgets import QMessageBox
-        logging.info(f"Showing update dialog for version {new_version}")
-        
-        msg_box = QMessageBox()
-        logo_icon = QIcon(self.logo_path)
-        if not logo_icon.isNull():
-            msg_box.setWindowIcon(logo_icon)
-            pixmap = QPixmap(self.logo_path)
-            if not pixmap.isNull():
-                msg_box.setIconPixmap(pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        
-        safe_new_ver = html.escape(str(new_version))
-        safe_curr_ver = html.escape(str(APP_VERSION))
-        msg_box.setWindowTitle("LayoutCorrector — Доступне оновлення")
-        msg_box.setText("<h3><b>Доступне оновлення LayoutCorrector</b></h3>")
-        msg_box.setInformativeText(
-            f"Знайдено новішу версію програми: <b>v{safe_new_ver}</b> (поточна версія: v{safe_curr_ver}).<br><br>"
-            "Бажаєте відкрити папку завантаження на Google Диску, щоб завантажити оновлення?"
-        )
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg_box.setDefaultButton(QMessageBox.StandardButton.Yes)
-        
-        # Apply dark theme styling matching the settings window
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #0F0F11;
-                color: #EEEEEE;
-                font-family: "Google Sans", "Segoe UI", sans-serif;
-            }
-            QLabel {
-                color: #EEEEEE;
-            }
-            QPushButton {
-                background-color: #1E1E22;
-                color: #EEEEEE;
-                border: 1px solid #3F3F46;
-                border-radius: 8px;
-                padding: 6px 18px;
-                font-weight: bold;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #2D2D34;
-                border-color: #3B82F6;
-            }
-            QPushButton:default {
-                background-color: #3B82F6;
-                color: #FFFFFF;
-                border: none;
-            }
-            QPushButton:default:hover {
-                background-color: #60A5FA;
-            }
-        """)
-        
-        reply = msg_box.exec()
-        if reply == QMessageBox.StandardButton.Yes:
+        logging.info(f"Showing custom update dialog for version {new_version}")
+        dlg = UpdateDialog(new_version=new_version, current_version=APP_VERSION)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             import webbrowser
             webbrowser.open(UPDATE_FOLDER_URL)
 
@@ -405,10 +424,10 @@ class AppController(QObject):
                 return
 
             current_version = tuple(map(int, APP_VERSION.split('.')))
-            
+
             latest_version_str = None
             latest_version = None
-            
+
             for f in files:
                 if not hasattr(f, 'path') or not f.path:
                     continue
@@ -424,7 +443,7 @@ class AppController(QObject):
                             latest_version_str = ver_str
                     except Exception:
                         pass
-            
+
             if latest_version and latest_version > current_version:
                 logging.info(f"New version found on Google Drive: {latest_version_str}")
                 self.update_available_signal.emit(latest_version_str)
@@ -462,11 +481,11 @@ def check_single_instance():
     ERROR_ALREADY_EXISTS = 183
     kernel32 = ctypes.windll.kernel32
     user32 = ctypes.windll.user32
-    
+
     mutex_name = "Local\\LayoutCorrector_SingleInstance_Mutex"
     _single_instance_mutex = kernel32.CreateMutexW(None, True, mutex_name)
     last_error = kernel32.GetLastError()
-    
+
     if last_error == ERROR_ALREADY_EXISTS:
         if _single_instance_mutex:
             kernel32.CloseHandle(_single_instance_mutex)
@@ -484,6 +503,11 @@ def main():
     logging.info("--- Starting Keyboard Layout Corrector ---")
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    # Initialize Fixel fonts and Material 3 Expressive theme
+    ui_common.load_fonts()
+    ui_common.load_theme(app)
+
     controller = AppController(app)
     app.aboutToQuit.connect(controller.listener.stop)
     sys.exit(app.exec())
